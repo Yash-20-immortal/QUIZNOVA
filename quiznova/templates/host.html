@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Host Game - QuizNova</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Exo+2:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="stars"></div>
+    <div class="stars2"></div>
+    <div class="stars3"></div>
+    
+    <div class="container">
+        <div class="glass-card host-card">
+            <div class="header">
+                <h1 class="page-title">Host Game</h1>
+                <a href="/" class="back-btn">← Back</a>
+            </div>
+            
+            <div id="setup-phase" class="phase active">
+                <div class="setup-form">
+                    <div class="form-group">
+                        <label for="host-name">Your Name</label>
+                        <input type="text" id="host-name" placeholder="Enter your name" class="neon-input">
+                    </div>
+                    
+                    <button id="create-game-btn" class="neon-button primary">
+                        <span>Create Game</span>
+                        <div class="button-glow"></div>
+                    </button>
+                </div>
+            </div>
+            
+            <div id="game-created" class="phase">
+                <div class="game-info">
+                    <div class="game-pin-display">
+                        <div class="pin-label">Game PIN</div>
+                        <div class="pin-number" id="game-pin">------</div>
+                        <button id="copy-pin-btn" class="copy-btn">📋</button>
+                    </div>
+                    
+                    <div class="share-info">
+                        <p>Share this PIN with players to join your game!</p>
+                    </div>
+                </div>
+                
+                <div class="quiz-setup">
+                    <h3>Add Questions</h3>
+                    <div class="question-form">
+                        <div class="form-group">
+                            <label for="question-text">Question</label>
+                            <textarea id="question-text" placeholder="Enter your question..." class="neon-input"></textarea>
+                        </div>
+                        
+                        <div class="options-container">
+                            <div class="form-group">
+                                <label for="option-a">Option A</label>
+                                <input type="text" id="option-a" placeholder="Answer A" class="neon-input">
+                            </div>
+                            <div class="form-group">
+                                <label for="option-b">Option B</label>
+                                <input type="text" id="option-b" placeholder="Answer B" class="neon-input">
+                            </div>
+                            <div class="form-group">
+                                <label for="option-c">Option C</label>
+                                <input type="text" id="option-c" placeholder="Answer C" class="neon-input">
+                            </div>
+                            <div class="form-group">
+                                <label for="option-d">Option D</label>
+                                <input type="text" id="option-d" placeholder="Answer D" class="neon-input">
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="correct-answer">Correct Answer</label>
+                            <select id="correct-answer" class="neon-input">
+                                <option value="0">A</option>
+                                <option value="1">B</option>
+                                <option value="2">C</option>
+                                <option value="3">D</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="time-limit">Time Limit (seconds)</label>
+                            <input type="number" id="time-limit" value="30" min="5" max="120" class="neon-input">
+                        </div>
+                        
+                        <button id="add-question-btn" class="neon-button secondary">
+                            <span>Add Question</span>
+                            <div class="button-glow"></div>
+                        </button>
+                    </div>
+                    
+                    <div class="questions-list">
+                        <h4>Questions Added: <span id="question-count">0</span></h4>
+                        <div id="questions-display"></div>
+                    </div>
+                </div>
+                
+                <div class="lobby-section">
+                    <h3>Players in Lobby</h3>
+                    <div id="players-list" class="players-list">
+                        <div class="waiting-message">Waiting for players to join...</div>
+                    </div>
+                    
+                    <button id="start-game-btn" class="neon-button primary" disabled>
+                        <span>Start Game</span>
+                        <div class="button-glow"></div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script>
+        // Host-specific JavaScript
+        const socket = io();
+        let gamePin = '';
+        let questions = [];
+        
+        document.getElementById('create-game-btn').addEventListener('click', () => {
+            const hostName = document.getElementById('host-name').value.trim();
+            if (!hostName) {
+                alert('Please enter your name');
+                return;
+            }
+            
+            socket.emit('create_game', { host_name: hostName });
+        });
+        
+        socket.on('game_created', (data) => {
+            gamePin = data.game_pin;
+            document.getElementById('game-pin').textContent = gamePin;
+            document.getElementById('setup-phase').classList.remove('active');
+            document.getElementById('game-created').classList.add('active');
+        });
+        
+        socket.on('player_joined', (data) => {
+            updatePlayersList(data.players);
+            if (data.players.length > 1) {
+                document.getElementById('start-game-btn').disabled = false;
+            }
+        });
+        
+        socket.on('player_left', (data) => {
+            updatePlayersList(data.players);
+            if (data.players.length <= 1) {
+                document.getElementById('start-game-btn').disabled = true;
+            }
+        });
+        
+        function updatePlayersList(players) {
+            const playersList = document.getElementById('players-list');
+            if (players.length === 0) {
+                playersList.innerHTML = '<div class="waiting-message">Waiting for players to join...</div>';
+                return;
+            }
+            
+            playersList.innerHTML = players.map(player => `
+                <div class="player-item ${player.is_host ? 'host' : ''}">
+                    <div class="player-name">${player.name}</div>
+                    ${player.is_host ? '<div class="host-badge">HOST</div>' : ''}
+                </div>
+            `).join('');
+        }
+        
+        document.getElementById('add-question-btn').addEventListener('click', () => {
+            const question = document.getElementById('question-text').value.trim();
+            const options = [
+                document.getElementById('option-a').value.trim(),
+                document.getElementById('option-b').value.trim(),
+                document.getElementById('option-c').value.trim(),
+                document.getElementById('option-d').value.trim()
+            ];
+            const correctAnswer = parseInt(document.getElementById('correct-answer').value);
+            const timeLimit = parseInt(document.getElementById('time-limit').value);
+            
+            if (!question || options.some(opt => !opt)) {
+                alert('Please fill in all fields');
+                return;
+            }
+            
+            const questionData = {
+                question,
+                options,
+                correct_answer: correctAnswer,
+                time_limit: timeLimit
+            };
+            
+            socket.emit('add_question', questionData);
+            questions.push(questionData);
+            
+            // Clear form
+            document.getElementById('question-text').value = '';
+            document.getElementById('option-a').value = '';
+            document.getElementById('option-b').value = '';
+            document.getElementById('option-c').value = '';
+            document.getElementById('option-d').value = '';
+            document.getElementById('correct-answer').value = '0';
+            document.getElementById('time-limit').value = '30';
+            
+            updateQuestionsDisplay();
+        });
+        
+        socket.on('question_added', (data) => {
+            document.getElementById('question-count').textContent = data.question_count;
+        });
+        
+        function updateQuestionsDisplay() {
+            const display = document.getElementById('questions-display');
+            display.innerHTML = questions.map((q, index) => `
+                <div class="question-item">
+                    <div class="question-number">Q${index + 1}</div>
+                    <div class="question-text">${q.question}</div>
+                    <div class="correct-answer">Correct: ${String.fromCharCode(65 + q.correct_answer)}) ${q.options[q.correct_answer]}</div>
+                </div>
+            `).join('');
+        }
+        
+        document.getElementById('start-game-btn').addEventListener('click', () => {
+            if (questions.length === 0) {
+                alert('Please add at least one question');
+                return;
+            }
+            socket.emit('start_game');
+        });
+        
+        socket.on('game_started', () => {
+            window.location.href = `/game/${gamePin}`;
+        });
+        
+        socket.on('start_error', (data) => {
+            alert(data.message);
+        });
+        
+        document.getElementById('copy-pin-btn').addEventListener('click', () => {
+            navigator.clipboard.writeText(gamePin);
+            const btn = document.getElementById('copy-pin-btn');
+            const originalText = btn.textContent;
+            btn.textContent = '✓';
+            setTimeout(() => {
+                btn.textContent = originalText;
+            }, 2000);
+        });
+    </script>
+</body>
+</html>

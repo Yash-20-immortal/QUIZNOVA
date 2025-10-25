@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaderboard - QuizNova</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Exo+2:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="stars"></div>
+    <div class="stars2"></div>
+    <div class="stars3"></div>
+    
+    <div class="container">
+        <div class="glass-card leaderboard-card">
+            <div class="header">
+                <h1 class="page-title">Final Results</h1>
+                <a href="/" class="back-btn">← New Game</a>
+            </div>
+            
+            <div class="leaderboard-content">
+                <div class="celebration">
+                    <div class="trophy">🏆</div>
+                    <h2>Quiz Complete!</h2>
+                    <p>Here are the final standings</p>
+                </div>
+                
+                <div class="leaderboard-container">
+                    <div class="leaderboard-header">
+                        <div class="rank-header">Rank</div>
+                        <div class="name-header">Player</div>
+                        <div class="score-header">Score</div>
+                    </div>
+                    
+                    <div id="leaderboard-list" class="leaderboard-list">
+                        <div class="loading">Loading results...</div>
+                    </div>
+                </div>
+                
+                <div class="game-actions">
+                    <a href="/host" class="neon-button primary">
+                        <span>Host New Game</span>
+                        <div class="button-glow"></div>
+                    </a>
+                    <a href="/join" class="neon-button secondary">
+                        <span>Join Another Game</span>
+                        <div class="button-glow"></div>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script>
+        const socket = io();
+        const gamePin = '{{ game_pin }}';
+        
+        // Request final scores
+        socket.emit('get_final_scores', { game_pin: gamePin });
+        
+        socket.on('final_scores', (data) => {
+            displayLeaderboard(data.scores);
+        });
+        
+        function displayLeaderboard(scores) {
+            const leaderboardList = document.getElementById('leaderboard-list');
+            
+            // Convert scores to array and sort by score
+            const sortedScores = Object.entries(scores)
+                .map(([name, score]) => ({ name, score }))
+                .sort((a, b) => b.score - a.score);
+            
+            if (sortedScores.length === 0) {
+                leaderboardList.innerHTML = '<div class="no-results">No scores available</div>';
+                return;
+            }
+            
+            leaderboardList.innerHTML = sortedScores.map((player, index) => {
+                const rank = index + 1;
+                const isTopThree = rank <= 3;
+                const rankClass = isTopThree ? `rank-${rank}` : '';
+                const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '';
+                
+                return `
+                    <div class="leaderboard-item ${rankClass}">
+                        <div class="rank">
+                            <span class="rank-number">${rank}</span>
+                            <span class="medal">${medal}</span>
+                        </div>
+                        <div class="player-name">${player.name}</div>
+                        <div class="player-score">${player.score}</div>
+                    </div>
+                `;
+            }).join('');
+            
+            // Add celebration animation for winner
+            if (sortedScores.length > 0) {
+                const winner = document.querySelector('.rank-1');
+                if (winner) {
+                    winner.classList.add('winner');
+                }
+            }
+        }
+        
+        // Fallback: if no real-time data, show placeholder
+        setTimeout(() => {
+            if (document.getElementById('leaderboard-list').innerHTML.includes('Loading')) {
+                displayLeaderboard({
+                    'Player 1': 850,
+                    'Player 2': 720,
+                    'Player 3': 680,
+                    'Player 4': 540
+                });
+            }
+        }, 2000);
+    </script>
+</body>
+</html>

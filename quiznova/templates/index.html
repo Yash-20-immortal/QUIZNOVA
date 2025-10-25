@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuizNova - Real-time Multiplayer Quiz</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Exo+2:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="stars"></div>
+    <div class="stars2"></div>
+    <div class="stars3"></div>
+    
+    <div class="container">
+        <div class="glass-card main-card">
+            <div class="logo-container">
+                <h1 class="logo">QuizNova</h1>
+                <div class="logo-subtitle">Real-time Multiplayer Quiz</div>
+                <div class="pulse-ring"></div>
+            </div>
+            
+            <div class="action-buttons">
+                <a href="/host" class="neon-button host-btn">
+                    <div class="button-content">
+                        <div class="button-icon">🎮</div>
+                        <div class="button-text">
+                            <div class="button-title">Host Game</div>
+                            <div class="button-subtitle">Create & Manage Quiz</div>
+                        </div>
+                    </div>
+                    <div class="button-glow"></div>
+                </a>
+                
+                <a href="/join" class="neon-button join-btn">
+                    <div class="button-content">
+                        <div class="button-icon">🚀</div>
+                        <div class="button-text">
+                            <div class="button-title">Join Game</div>
+                            <div class="button-subtitle">Enter PIN & Play</div>
+                        </div>
+                    </div>
+                    <div class="button-glow"></div>
+                </a>
+            </div>
+            
+            <div class="features">
+                <div class="feature-item">
+                    <div class="feature-icon">⚡</div>
+                    <div class="feature-text">Real-time Updates</div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">🏆</div>
+                    <div class="feature-text">Live Leaderboard</div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">🎯</div>
+                    <div class="feature-text">Instant Scoring</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

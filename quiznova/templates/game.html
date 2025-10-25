@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Game - QuizNova</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Exo+2:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="stars"></div>
+    <div class="stars2"></div>
+    <div class="stars3"></div>
+    
+    <div class="container">
+        <div class="glass-card game-card">
+            <div class="game-header">
+                <div class="game-info">
+                    <div class="question-counter">
+                        <span id="current-question">1</span> / <span id="total-questions">1</span>
+                    </div>
+                    <div class="timer-container">
+                        <div class="timer-circle">
+                            <div class="timer-text" id="timer-text">30</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="question-section">
+                <h2 id="question-text" class="question-text">Loading question...</h2>
+                
+                <div class="options-container" id="options-container">
+                    <!-- Options will be populated by JavaScript -->
+                </div>
+            </div>
+            
+            <div class="game-footer">
+                <div class="score-display">
+                    <div class="score-label">Your Score</div>
+                    <div class="score-value" id="player-score">0</div>
+                </div>
+                
+                <div class="players-online">
+                    <div class="online-label">Players Online</div>
+                    <div class="online-count" id="online-count">1</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Host Controls (only visible to host) -->
+        <div id="host-controls" class="host-controls" style="display: none;">
+            <div class="glass-card">
+                <h3>Host Controls</h3>
+                <div class="host-stats">
+                    <div class="stat-item">
+                        <div class="stat-label">Responses</div>
+                        <div class="stat-value" id="response-count">0</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Correct</div>
+                        <div class="stat-value" id="correct-count">0</div>
+                    </div>
+                </div>
+                <button id="next-question-btn" class="neon-button primary" disabled>
+                    <span>Next Question</span>
+                    <div class="button-glow"></div>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script>
+        const socket = io();
+        const gamePin = '{{ game_pin }}';
+        let currentQuestion = null;
+        let timeLeft = 30;
+        let timerInterval = null;
+        let isHost = false;
+        let playerScore = 0;
+        let responseCount = 0;
+        let correctCount = 0;
+        
+        // Check if this is the host (you'd need to pass this from the backend)
+        // For now, we'll determine it based on the URL or other logic
+        
+        socket.on('new_question', (data) => {
+            currentQuestion = data;
+            timeLeft = data.time_limit;
+            
+            document.getElementById('current-question').textContent = data.question_number;
+            document.getElementById('total-questions').textContent = data.total_questions;
+            document.getElementById('question-text').textContent = data.question;
+            
+            // Clear previous options
+            const optionsContainer = document.getElementById('options-container');
+            optionsContainer.innerHTML = '';
+            
+            // Add new options
+            data.options.forEach((option, index) => {
+                const optionElement = document.createElement('div');
+                optionElement.className = 'option-button';
+                optionElement.innerHTML = `
+                    <div class="option-letter">${String.fromCharCode(65 + index)})</div>
+                    <div class="option-text">${option}</div>
+                `;
+                optionElement.addEventListener('click', () => selectAnswer(index));
+                optionsContainer.appendChild(optionElement);
+            });
+            
+            // Start timer
+            startTimer();
+            
+            // Reset host controls
+            if (isHost) {
+                responseCount = 0;
+                correctCount = 0;
+                document.getElementById('response-count').textContent = '0';
+                document.getElementById('correct-count').textContent = '0';
+                document.getElementById('next-question-btn').disabled = true;
+            }
+        });
+        
+        socket.on('question_timer', (data) => {
+            timeLeft = data.time_left;
+            updateTimer();
+        });
+        
+        socket.on('answer_received', (data) => {
+            if (isHost) {
+                responseCount++;
+                document.getElementById('response-count').textContent = responseCount;
+                
+                if (data.is_correct) {
+                    correctCount++;
+                    document.getElementById('correct-count').textContent = correctCount;
+                }
+                
+                // Enable next question button after some responses
+                if (responseCount >= 1) {
+                    document.getElementById('next-question-btn').disabled = false;
+                }
+            }
+            
+            // Update player score
+            if (data.player_name === getPlayerName()) {
+                playerScore = data.score;
+                document.getElementById('player-score').textContent = playerScore;
+            }
+        });
+        
+        socket.on('game_finished', (data) => {
+            window.location.href = `/leaderboard/${gamePin}`;
+        });
+        
+        function selectAnswer(answerIndex) {
+            if (!currentQuestion) return;
+            
+            // Disable all options
+            const options = document.querySelectorAll('.option-button');
+            options.forEach(option => {
+                option.style.pointerEvents = 'none';
+                option.classList.add('disabled');
+            });
+            
+            // Highlight selected option
+            options[answerIndex].classList.add('selected');
+            
+            // Submit answer
+            socket.emit('submit_answer', { answer: answerIndex });
+            
+            // Show correct answer after a delay
+            setTimeout(() => {
+                showCorrectAnswer();
+            }, 1000);
+        }
+        
+        function showCorrectAnswer() {
+            if (!currentQuestion) return;
+            
+            const options = document.querySelectorAll('.option-button');
+            const correctIndex = currentQuestion.correct_answer;
+            
+            options.forEach((option, index) => {
+                if (index === correctIndex) {
+                    option.classList.add('correct');
+                } else if (option.classList.contains('selected')) {
+                    option.classList.add('incorrect');
+                }
+            });
+        }
+        
+        function startTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+            }
+            
+            updateTimer();
+            
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                updateTimer();
+                
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    // Auto-submit if no answer selected
+                    if (!document.querySelector('.option-button.selected')) {
+                        socket.emit('submit_answer', { answer: -1 });
+                    }
+                    showCorrectAnswer();
+                }
+            }, 1000);
+        }
+        
+        function updateTimer() {
+            const timerText = document.getElementById('timer-text');
+            timerText.textContent = timeLeft;
+            
+            const timerCircle = document.querySelector('.timer-circle');
+            const percentage = (timeLeft / 30) * 100;
+            timerCircle.style.background = `conic-gradient(#00ff88 ${percentage * 3.6}deg, rgba(0,255,136,0.2) 0deg)`;
+            
+            if (timeLeft <= 10) {
+                timerCircle.classList.add('warning');
+            } else {
+                timerCircle.classList.remove('warning');
+            }
+        }
+        
+        function getPlayerName() {
+            // This would need to be stored from the join process
+            return localStorage.getItem('playerName') || 'Player';
+        }
+        
+        // Host controls
+        document.getElementById('next-question-btn').addEventListener('click', () => {
+            socket.emit('next_question');
+        });
+        
+        // Check if this is the host (simplified - in real app, this would come from server)
+        if (window.location.pathname.includes('host') || localStorage.getItem('isHost') === 'true') {
+            isHost = true;
+            document.getElementById('host-controls').style.display = 'block';
+        }
+    </script>
+</body>
+</html>

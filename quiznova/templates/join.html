@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Join Game - QuizNova</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Exo+2:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="stars"></div>
+    <div class="stars2"></div>
+    <div class="stars3"></div>
+    
+    <div class="container">
+        <div class="glass-card join-card">
+            <div class="header">
+                <h1 class="page-title">Join Game</h1>
+                <a href="/" class="back-btn">← Back</a>
+            </div>
+            
+            <div id="join-form" class="join-form">
+                <div class="form-group">
+                    <label for="player-name">Your Name</label>
+                    <input type="text" id="player-name" placeholder="Enter your name" class="neon-input" maxlength="20">
+                </div>
+                
+                <div class="form-group">
+                    <label for="game-pin">Game PIN</label>
+                    <input type="text" id="game-pin" placeholder="Enter 6-digit PIN" class="neon-input" maxlength="6" pattern="[0-9]{6}">
+                </div>
+                
+                <button id="join-game-btn" class="neon-button primary">
+                    <span>Join Game</span>
+                    <div class="button-glow"></div>
+                </button>
+                
+                <div id="error-message" class="error-message"></div>
+            </div>
+            
+            <div id="lobby-view" class="lobby-view">
+                <div class="lobby-info">
+                    <h3>Joined Successfully!</h3>
+                    <div class="game-pin-display">
+                        <div class="pin-label">Game PIN</div>
+                        <div class="pin-number" id="displayed-pin">------</div>
+                    </div>
+                </div>
+                
+                <div class="players-section">
+                    <h4>Players in Lobby</h4>
+                    <div id="players-list" class="players-list">
+                        <div class="waiting-message">Waiting for other players...</div>
+                    </div>
+                </div>
+                
+                <div class="waiting-info">
+                    <div class="pulse-dot"></div>
+                    <p>Waiting for host to start the game...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script>
+        // Join-specific JavaScript
+        const socket = io();
+        let gamePin = '';
+        
+        document.getElementById('join-game-btn').addEventListener('click', () => {
+            const playerName = document.getElementById('player-name').value.trim();
+            const gamePinInput = document.getElementById('game-pin').value.trim();
+            
+            if (!playerName) {
+                showError('Please enter your name');
+                return;
+            }
+            
+            if (!gamePinInput || gamePinInput.length !== 6) {
+                showError('Please enter a valid 6-digit PIN');
+                return;
+            }
+            
+            gamePin = gamePinInput;
+            socket.emit('join_game', { 
+                player_name: playerName, 
+                game_pin: gamePin 
+            });
+        });
+        
+        socket.on('join_success', (data) => {
+            gamePin = data.game_pin;
+            document.getElementById('displayed-pin').textContent = gamePin;
+            document.getElementById('join-form').style.display = 'none';
+            document.getElementById('lobby-view').style.display = 'block';
+        });
+        
+        socket.on('join_error', (data) => {
+            showError(data.message);
+        });
+        
+        socket.on('player_joined', (data) => {
+            updatePlayersList(data.players);
+        });
+        
+        socket.on('player_left', (data) => {
+            updatePlayersList(data.players);
+        });
+        
+        socket.on('game_started', () => {
+            window.location.href = `/game/${gamePin}`;
+        });
+        
+        socket.on('host_disconnected', () => {
+            showError('Host disconnected. Game ended.');
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 3000);
+        });
+        
+        function updatePlayersList(players) {
+            const playersList = document.getElementById('players-list');
+            if (players.length === 0) {
+                playersList.innerHTML = '<div class="waiting-message">Waiting for other players...</div>';
+                return;
+            }
+            
+            playersList.innerHTML = players.map(player => `
+                <div class="player-item ${player.is_host ? 'host' : ''}">
+                    <div class="player-name">${player.name}</div>
+                    ${player.is_host ? '<div class="host-badge">HOST</div>' : ''}
+                </div>
+            `).join('');
+        }
+        
+        function showError(message) {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Auto-format PIN input
+        document.getElementById('game-pin').addEventListener('input', (e) => {
+            e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
+        });
+    </script>
+</body>
+</html>
