@@ -1,148 +1,172 @@
-class QuizNovaClient {
+class QuizNova {
     constructor() {
-        this.socket = null;
-        this.gamePin = '';
-        this.isHost = false;
-        this.playerName = '';
-        this.currentQuestion = null;
-        this.timeLeft = 30;
-        this.timerInterval = null;
-        this.playerScore = 0;
-        this.init();
-    }
-
-    init() {
         this.socket = io();
-        this.setupEventListeners();
-        this.loadStoredData();
-    }
-
-    setupEventListeners() {
-        this.socket.on('connect', () => {
-            console.log('✅ Connected to server');
-
-            // 🔁 Try rejoining automatically
-            const storedPin = localStorage.getItem('gamePin');
-            const storedName = localStorage.getItem('playerName');
-            const storedHost = localStorage.getItem('isHost') === 'true';
-
-            if (storedPin && storedName) {
-                console.log("🔁 Attempting rejoin:", storedPin, storedName, storedHost);
-                this.socket.emit('rejoin_game', {
-                    game_pin: storedPin,
-                    player_name: storedName,
-                    is_host: storedHost
-                });
-            }
-        });
-
-        this.socket.on('disconnect', () => {
-            console.warn('❌ Disconnected from server');
-        });
-
-        // Standard events
-        this.socket.on('game_created', (data) => this.handleGameCreated(data));
-        this.socket.on('join_success', (data) => this.handleJoinSuccess(data));
-        this.socket.on('join_error', (data) => alert(data.message));
-        this.socket.on('player_joined', (data) => this.updatePlayersList(data.players));
-        this.socket.on('game_started', () => this.handleGameStarted());
-        this.socket.on('new_question', (data) => this.handleNewQuestion(data));
-        this.socket.on('answer_received', (data) => this.handleAnswerReceived(data));
-        this.socket.on('game_finished', (data) => this.handleGameFinished(data));
-        this.socket.on('host_disconnected', (data) => alert(data.message || 'Host disconnected'));
-    }
-
-    loadStoredData() {
-        this.playerName = localStorage.getItem('playerName') || '';
-        this.isHost = localStorage.getItem('isHost') === 'true';
-        this.gamePin = localStorage.getItem('gamePin') || '';
-    }
-
-    storeData() {
-        localStorage.setItem('playerName', this.playerName);
-        localStorage.setItem('isHost', this.isHost.toString());
-        localStorage.setItem('gamePin', this.gamePin);
-    }
-
-    handleGameCreated(data) {
-        this.gamePin = data.game_pin;
-        this.isHost = true;
-        this.storeData();
-        alert(`Game Created! PIN: ${this.gamePin}`);
-    }
-
-    handleJoinSuccess(data) {
-        this.gamePin = data.game_pin;
-        this.storeData();
-        alert("Joined game successfully!");
-    }
-
-    handleGameStarted() {
-        alert('Game starting...');
-        window.location.href = `/game/${this.gamePin}`;
-    }
-
-    handleNewQuestion(data) {
-        console.log("🧠 New Question Received:", data);
-        this.currentQuestion = data;
-        document.getElementById('question-text').textContent = data.question;
-        const optionsContainer = document.getElementById('options-container');
-        optionsContainer.innerHTML = '';
-        data.options.forEach((opt, i) => {
-            const btn = document.createElement('button');
-            btn.textContent = opt;
-            btn.className = 'option-button';
-            btn.onclick = () => this.submitAnswer(i);
-            optionsContainer.appendChild(btn);
-        });
-    }
-
-    submitAnswer(i) {
-        this.socket.emit('submit_answer', { answer: i });
-    }
-
-    handleAnswerReceived(data) {
-        console.log("✅ Answer result:", data);
-    }
-
-    handleGameFinished(data) {
-        console.log("🏁 Game finished:", data);
-        alert('Game over!');
-        window.location.href = `/leaderboard/${this.gamePin}`;
-    }
-
-    updatePlayersList(players) {
-        console.log("👥 Player list:", players);
-    }
-
-    createGame(hostName) {
-        this.playerName = hostName;
-        this.isHost = true;
-        this.socket.emit('create_game', { host_name: hostName });
-        this.storeData();
-    }
-
-    joinGame(playerName, pin) {
-        this.playerName = playerName;
+        this.gamePin = null;
         this.isHost = false;
-        this.gamePin = pin;
-        this.storeData();
-        this.socket.emit('join_game', { player_name: playerName, game_pin: pin });
+        this.playerName = null;
+
+        // Basic connection log
+        this.socket.on('connect', () => console.log("✅ Connected to QuizNova server"));
+
+        // Event listeners
+        this.socket.on('game_created', (data) => this.showGamePin(data.game_pin));
+        this.socket.on('player_joined', (data) => this.updatePlayerList(data.players));
+        this.socket.on('join_error', (data) => alert(data.message));
+        this.socket.on('join_success', (data) => this.enterLobby(data.game_pin));
+        this.socket.on('question_added', (data) => this.showQuestionAdded(data.question_count));
+        this.socket.on('game_started', () => this.startGame());
+        this.socket.on('new_question', (data) => this.handleNewQuestion(data));
+        this.socket.on('answer_received', (data) => this.showAnswerFeedback(data));
+        this.socket.on('game_finished', (data) => this.showFinalScores(data.final_scores));
+        this.socket.on('host_disconnected', () => this.showHostDisconnected());
+        this.socket.on('player_left', (data) => this.updatePlayerList(data.players));
+
+        console.log("🎮 QuizNova initialized.");
     }
 
-    addQuestion(q) {
-        this.socket.emit('add_question', q);
+    // ======== HOST ACTIONS ========
+
+    createGame() {
+        const hostName = document.getElementById("host-name").value.trim();
+        if (!hostName) return alert("Enter a host name!");
+        this.isHost = true;
+        this.playerName = hostName;
+        this.socket.emit('create_game', { host_name: hostName });
+    }
+
+    showGamePin(pin) {
+        this.gamePin = pin;
+        document.getElementById("game-pin").innerText = pin;
+        document.getElementById("setup").style.display = "none";
+        document.getElementById("lobby").style.display = "block";
+    }
+
+    addQuestion() {
+        const question = document.getElementById("question").value.trim();
+        const options = [
+            document.getElementById("opt1").value,
+            document.getElementById("opt2").value,
+            document.getElementById("opt3").value,
+            document.getElementById("opt4").value
+        ];
+        const correct = document.querySelector('input[name="correct"]:checked');
+        if (!question || !correct) return alert("Fill question and select correct answer!");
+
+        this.socket.emit('add_question', {
+            question,
+            options,
+            correct_answer: parseInt(correct.value),
+            time_limit: 10
+        });
+    }
+
+    showQuestionAdded(count) {
+        alert(`✅ Question ${count} added!`);
+        document.getElementById("question-form").reset();
     }
 
     startGame() {
-        this.socket.emit('start_game');
+        if (this.isHost) {
+            this.socket.emit('start_game');
+        }
+        document.getElementById("lobby").style.display = "none";
+        document.getElementById("game-screen").style.display = "block";
+        document.getElementById("loading-screen").style.display = "block";
     }
 
-    nextQuestion() {
-        this.socket.emit('next_question');
+    // ======== PLAYER ACTIONS ========
+
+    joinGame() {
+        const gamePin = document.getElementById("join-pin").value.trim();
+        const playerName = document.getElementById("join-name").value.trim();
+        if (!gamePin || !playerName) return alert("Enter game PIN and name!");
+        this.playerName = playerName;
+        this.socket.emit('join_game', { game_pin: gamePin, player_name: playerName });
+    }
+
+    enterLobby(gamePin) {
+        this.gamePin = gamePin;
+        document.getElementById("join-screen").style.display = "none";
+        document.getElementById("lobby").style.display = "block";
+    }
+
+    updatePlayerList(players) {
+        const list = document.getElementById("players-list");
+        if (!list) return;
+        list.innerHTML = players.map(p =>
+            `<li>${p.name}${p.is_host ? " 👑" : ""}</li>`
+        ).join('');
+    }
+
+    // ======== GAMEPLAY ========
+
+    handleNewQuestion(data) {
+        console.log("🟢 New question received:", data);
+
+        const loadingScreen = document.getElementById("loading-screen");
+        const questionContainer = document.getElementById("question-container");
+
+        if (loadingScreen) loadingScreen.style.display = "none";
+        if (questionContainer) {
+            questionContainer.style.display = "block";
+            questionContainer.innerHTML = `
+                <h2>Question ${data.question_number}/${data.total_questions}</h2>
+                <p>${data.question}</p>
+                <ul>
+                    ${data.options.map((opt, i) =>
+                        `<li><button class="option-btn" data-index="${i}">${opt}</button></li>`
+                    ).join('')}
+                </ul>
+                <p>Time left: <span id="time-left">${data.time_limit}</span>s</p>
+            `;
+        }
+
+        // Start timer
+        let timeLeft = data.time_limit;
+        const timer = setInterval(() => {
+            timeLeft--;
+            const display = document.getElementById("time-left");
+            if (display) display.textContent = timeLeft;
+            if (timeLeft <= 0) clearInterval(timer);
+        }, 1000);
+
+        // Answer click logic
+        document.querySelectorAll(".option-btn").forEach(btn => {
+            btn.onclick = () => {
+                const index = btn.dataset.index;
+                this.socket.emit('submit_answer', { answer: parseInt(index) });
+                document.querySelectorAll(".option-btn").forEach(b => b.disabled = true);
+                btn.classList.add("selected");
+            };
+        });
+    }
+
+    showAnswerFeedback(data) {
+        console.log("📩 Answer received:", data);
+        const msg = document.getElementById("answer-feedback");
+        if (msg) {
+            msg.innerText = data.is_correct
+                ? `✅ ${data.player_name} answered correctly! +${data.score}`
+                : `❌ ${data.player_name} answered wrong.`;
+        }
+    }
+
+    showFinalScores(scores) {
+        const screen = document.getElementById("game-screen");
+        screen.innerHTML = `<h2>🏆 Final Scores</h2>
+            <ul>${Object.entries(scores)
+                .map(([name, score]) => `<li>${name}: ${score}</li>`).join('')}
+            </ul>`;
+    }
+
+    showHostDisconnected() {
+        alert("⚠️ Host disconnected. Game ended.");
+        window.location.href = "/";
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    window.quizNova = new QuizNovaClient();
-});
+// Initialize game instance
+window.onload = () => {
+    window.quiznova = new QuizNova();
+    console.log("🚀 QuizNova client ready.");
+};
